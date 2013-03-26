@@ -1,0 +1,47 @@
+#!/usr/bin/env python
+
+from __future__ import division
+from other.core import *
+from other.core.geometry.platonic import *
+from other.gui import *
+from OpenGL import GL
+import sys
+
+# Define properties
+props = PropManager()
+sphere_levels = props.add('sphere_levels',3).set_category('kiss')
+
+@cache
+def sphere():
+  return sphere_mesh(sphere_levels())
+
+@cache_render
+def draw_sphere():
+  mesh,X = sphere()
+  tm = TriMesh()
+  tm.add_vertices(X)
+  tm.add_faces(mesh.elements)
+  tm.request_face_normals()
+  tm.request_vertex_normals()
+  tm.update_normals()
+  render_mesh(tm,ctNone,True)
+
+class KissScene(Scene):
+  def bounding_box(self):
+    return Box(-3*ones(3),3*ones(3))
+  def render(self,*args):
+    _,X = icosahedron_mesh()
+    X = 2*normalized(X)
+    GL.glColor(1,.2,.2)
+    draw_sphere().call()
+    GL.glColor(0,.6,.8)
+    gl_instances(Frames(X,Rotation.identity(3)).matrix(),draw_sphere())
+
+# Visualize
+app = QEApp(sys.argv,True)
+main = MainWindow(props)
+main.view.add_scene('kiss',KissScene())
+main.init()
+main.show_prop_section('kiss')
+main.view.show_all(True)
+app.run()
