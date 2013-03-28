@@ -1,0 +1,6 @@
+SConstruct
+setup.cfg
+config.py
+.sconsign.dblite
+build
+*.pyc
