@@ -3,13 +3,17 @@
 from __future__ import division
 from other.core import *
 from other.core.geometry.platonic import *
+from other.core.value import parser
 from other.gui import *
+from kiss import *
 from OpenGL import GL
 import sys
 
 # Define properties
 props = PropManager()
-sphere_levels = props.add('sphere_levels',3).set_category('kiss')
+sphere_levels = props.add('sphere_levels',5).set_category('kiss')
+animation_seed = props.add('animation_seed',0).set_category('kiss')
+parser.parse(props,'Sphere kissing number visualization')
 
 @cache
 def sphere():
@@ -26,20 +30,96 @@ def draw_sphere():
   tm.update_normals()
   render_mesh(tm,ctNone,True)
 
+def generator_rotations(g):
+  '''Generate a rotation path that realizes the given generator'''
+  mesh,X = icosahedron_mesh()
+  gens,info = generator_info()
+  (v,n), = info[gens==g]
+  (ov,), = nonzero(magnitudes(X+X[v])<1e-5)
+  rings = mesh.sorted_neighbors()
+  path = repeat(Rotation.identity(3),3*12).reshape(3,-1)
+  shift = angle_between(X[v],X[rings[v,0]])-pi/3
+  for u in v,ov:
+    for r in rings[u]:
+      path[0,r] = Rotation.from_angle_axis(shift,cross(X[r],X[u]))
+  path[1,rings[v]] = Rotation.from_angle_axis(2*pi/5*n,X[v])
+  for u in v,ov:
+    for r in rings[u]:
+      path[2,r] = path[1,r]*path[0,r].inverse()*path[1,r].inverse()
+  times = asarray([shift,abs(2*pi/5*n),shift])
+  return times,path
+
+def shortest_path_rotations(g):
+  times = []
+  path = []
+  gp = s12_identity
+  for h in shortest_path(g):
+    t,p = generator_rotations(h)
+    p = p[:,to_permutation(gp)]
+    times.extend(t)
+    path.append(p)
+    gp = s12_times(h,gp)
+  return asarray(times),concatenate(path).view(Rotation.Rotations3d)
+
+@cache
+def animation():
+  seed = animation_seed()
+  if not seed:
+    return (),()
+  random.seed(seed)
+  while 1:
+    g = arange(12,dtype=int32)
+    random.shuffle(g)
+    g = from_permutation(g)
+    if s12_parity(g)==1:
+      break
+  props.get('last_frame').set(20*len(shortest_path(g)))
+  return shortest_path_rotations(g)
+
+@cache
+def colors():
+  _,X = icosahedron_mesh()
+  X = normalized(X)
+  d = (dots(X,X[0])+1)/2
+  return wheel_color(.7*d)
+
 class KissScene(Scene):
   def bounding_box(self):
     return Box(-3*ones(3),3*ones(3))
   def render(self,*args):
     _,X = icosahedron_mesh()
     X = 2*normalized(X)
-    GL.glColor(1,.2,.2)
+    GL.glColor(.3,.3,.3)
     draw_sphere().call()
-    GL.glColor(0,.6,.8)
-    gl_instances(Frames(X,Rotation.identity(3)).matrix(),draw_sphere())
+    times,path = animation()
+    if not len(path):
+      GL.glColor(0,.6,.8)
+      gl_instances(Frames(X,Rotation.identity(3)).matrix(),draw_sphere())
+    else:
+      total = sum(times)
+      t = total*(1-props.get('frame')()/props.get('last_frame')())
+      r = Rotation.identity(3)
+      keys = hstack([0,cumsum(times)])
+      for i in xrange(len(path)):
+        if t<=keys[i]:
+          break
+        elif t>=keys[i+1]:
+          r = path[i]*r
+        else:
+          r = Frame.interpolation(Frame.identity(3),Frames(zeros(3),path[i]),(t-keys[i])/times[i]).r*r
+      for x,c in zip(r*X,colors()):
+        GL.glColor(c)
+        gl_instances(Frames(x,Rotation.identity(3)).matrix(),draw_sphere())
 
 # Visualize
 app = QEApp(sys.argv,True)
 main = MainWindow(props)
+main.resize_timeline(80)
+# Add useful key bindings
+main.add_menu_item('Timeline','Play/Stop',main.timeline.info.set_play,'Ctrl+p')
+main.add_menu_item('Timeline','Step back',main.timeline.info.go_back,'Ctrl+< Ctrl+,')
+main.add_menu_item('Timeline','Step forward',main.timeline.info.go_forward,'Ctrl+.') # Possibly due to a Qt bug, 'Ctrl+> Ctrl+.' doesn't work
+# Add scene
 main.view.add_scene('kiss',KissScene())
 main.init()
 main.show_prop_section('kiss')

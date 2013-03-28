@@ -13,14 +13,13 @@ def test_paths():
   # Evaluate various shortest paths
   counts = zeros(9,dtype=int) 
   random.seed(239500800)
-  gens = generators()
-  print 'generators = %s'%' '.join(map(cycles,gens))
+  print 'generators = %s'%' '.join(map(cycles,generators()))
   for _ in xrange(2000):
     g = arange(12,dtype=int32)
     random.shuffle(g)
     g = from_permutation(g)
     if s12_parity(g)>0: 
-      path = shortest_path(gens,g)
+      path = shortest_path(g)
       counts[len(path)] += 1
       if 0:
         print '%s = %d'%(cycles(g),len(path))

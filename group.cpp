@@ -11,6 +11,7 @@
 #include <other/core/utility/Log.h>
 #include <other/core/value/Compute.h>
 #include <other/core/value/ConstValue.h>
+#include <other/core/value/extract.h>
 namespace kiss {
 namespace {
 
@@ -80,6 +81,13 @@ S12 from_permutation(RawArray<const int> p) {
   return r;
 }
 
+Array<const int> to_permutation(const S12 g) {
+  Array<int> p(12,false);
+  for (const int i : range(12))
+    p[i] = g[i];
+  return p;
+}
+
 int s12_parity(const S12 g) {
   int s = 1;
   int mask = 0;
@@ -135,11 +143,12 @@ template<> struct FromPython<S12> { static S12 convert(PyObject* object) {
 S12 s12_times(S12 g, S12 h) { return g*h; }
 S12 s12_inverse(S12 g) { return g.inverse(); }
 
-Array<const S12> make_generators() {
+Tuple<Array<const S12>,Array<const Vector<int,2>>> make_generator_info() {
   const auto mesh = icosahedron_mesh().x;
   OTHER_ASSERT(mesh->nodes()==12);
   const auto rings = mesh->sorted_neighbors();
   Array<S12> gens;
+  Array<Vector<int,2>> info;
   for (const int i : range(12)) {
     const auto ring = rings[i];
     OTHER_ASSERT(ring.size()==5);
@@ -150,12 +159,14 @@ Array<const S12> make_generators() {
         g = g.with(ring[j],ring[(j+n)%5]);
       OTHER_ASSERT(g.valid());
       gens.append(g);
+      info.append(vec(i,n<3?n:n-5));
     }
   }
   OTHER_ASSERT(gens.size()==12*4);
-  return gens;
+  return tuple(gens.const_(),info.const_());
 }
-const auto generators = cache(make_generators);
+const auto generator_info = cache(make_generator_info);
+const auto generators = extract<0>(generator_info);
 
 const vector<ValueRef<Hashtable<S12>>> generator_powers = []() {
   vector<ValueRef<Hashtable<S12>>> powers;
@@ -175,7 +186,7 @@ const vector<ValueRef<Hashtable<S12>>> generator_powers = []() {
 }();
 
 // Find (k,h) where d(1,g) = k, d(1,h) = k/2, d(h,g) = (k+1)/2
-Tuple<int,S12> shortest_path_midpoint(RawArray<const S12> gens, const S12 g) {
+Tuple<int,S12> shortest_path_midpoint(const S12 g) {
   OTHER_ASSERT(s12_parity(g)==1);
   // Check distance 0
   if (g==S12())
@@ -192,14 +203,14 @@ Tuple<int,S12> shortest_path_midpoint(RawArray<const S12> gens, const S12 g) {
   }
 }
 
-Array<S12> shortest_path(RawArray<const S12> gens, const S12 g) {
-  const auto kh = shortest_path_midpoint(gens,g);
+Array<S12> shortest_path(const S12 g) {
+  const auto kh = shortest_path_midpoint(g);
   Array<S12> path;
   if (kh.x==1)
     path.append(g);
   else if (kh.x>1) {
-    path.append_elements(shortest_path(gens,kh.y));
-    path.append_elements(shortest_path(gens,kh.y.inverse()*g));
+    path.append_elements(shortest_path(kh.y));
+    path.append_elements(shortest_path(kh.y.inverse()*g));
   }
   return path;
 }
@@ -257,8 +268,10 @@ OTHER_PYTHON_MODULE(kiss_core) {
   OTHER_FUNCTION(s12_times)
   OTHER_FUNCTION(s12_inverse)
   OTHER_FUNCTION(from_permutation)
+  OTHER_FUNCTION(to_permutation)
   OTHER_FUNCTION(cycles)
   OTHER_OBJECT(generators)
+  OTHER_OBJECT(generator_info)
   OTHER_FUNCTION(shortest_path_midpoint)
   OTHER_FUNCTION(shortest_path)
 }
