@@ -13,22 +13,26 @@ import sys
 props = PropManager()
 sphere_levels = props.add('sphere_levels',5).set_category('kiss')
 animation_seed = props.add('animation_seed',0).set_category('kiss')
+draw_outer = props.add('draw_outer',True).set_category('kiss')
+joinery = props.add('joinery',False).set_category('kiss')
 parser.parse(props,'Sphere kissing number visualization')
 
 @cache
 def sphere():
   return sphere_mesh(sphere_levels())
 
-@cache_render
-def draw_sphere():
-  mesh,X = sphere()
+@cache
+def inner():
+  raise NotImplementedError('no joinery yet')
+
+def to_trimesh(mesh):
+  if isinstance(mesh,TriMesh):
+    return mesh
+  mesh,X = mesh
   tm = TriMesh()
   tm.add_vertices(X)
   tm.add_faces(mesh.elements)
-  tm.request_face_normals()
-  tm.request_vertex_normals()
-  tm.update_normals()
-  render_mesh(tm,ctNone,True)
+  return tm
 
 def generator_rotations(g):
   '''Generate a rotation path that realizes the given generator'''
@@ -83,6 +87,15 @@ def colors():
   d = (dots(X,X[0])+1)/2
   return wheel_color(.7*d)
 
+def draw_mesh(tm,smooth=True):
+  tm = to_trimesh(tm)
+  tm.request_face_normals()
+  tm.request_vertex_normals()
+  tm.update_normals()
+  render_mesh(tm,ctNone,smooth)
+draw_sphere = cache_render(lambda:draw_mesh(sphere()))
+draw_inner = cache_render(lambda:draw_mesh(inner()))
+
 class KissScene(Scene):
   def bounding_box(self):
     return Box(-3*ones(3),3*ones(3))
@@ -90,7 +103,10 @@ class KissScene(Scene):
     _,X = icosahedron_mesh()
     X = 2*normalized(X)
     GL.glColor(.3,.3,.3)
-    draw_sphere().call()
+    if joinery():
+      draw_inner().call()  
+    else:
+      draw_sphere().call()
     times,path = animation()
     if not len(path):
       GL.glColor(0,.6,.8)

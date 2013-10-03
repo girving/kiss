@@ -209,60 +209,17 @@ Array<S12> shortest_path(const S12 g) {
   if (kh.x==1)
     path.append(g);
   else if (kh.x>1) {
-    path.append_elements(shortest_path(kh.y));
-    path.append_elements(shortest_path(kh.y.inverse()*g));
+    path.extend(shortest_path(kh.y));
+    path.extend(shortest_path(kh.y.inverse()*g));
   }
   return path;
 }
-
-struct Paths : public Object {
-  OTHER_DECLARE_TYPE(OTHER_NO_EXPORT)
-  typedef Object Base;
-
-protected:
-  Hashtable<S12,uint16_t> steps;
-
-  Paths() {
-    Log::Scope scope("paths");
-    const Array<const S12> gens = generators();
-    steps.set(S12(),0);
-    Array<S12> work;
-    work.append(S12());
-    int s;
-    for (s=1;work.size();s++) {
-      Log::Scope scope(format("level %d",s));
-      Array<S12> next;
-      for (const auto g : work)
-        for (const auto h : gens) {
-          const auto gh = g*h;
-          auto& sgh = steps.get_or_insert(gh,(uint16_t)-1);
-          if (sgh==(uint16_t)-1) {
-            sgh = s;
-            next.append(gh);
-          }
-        }
-      cout << "next = "<<next.size()<<", all = "<<steps.size()<<endl;
-      work = next;
-    }
-    cout << "diameter = "<<s<<endl;
-    cout << "reachable = "<<steps.size()<<", expected "<<Factorial<12>::value/2<<endl;
-    OTHER_ASSERT(steps.size()==Factorial<12>::value/2);
-  }
-public:
-};
-
-OTHER_DEFINE_TYPE(Paths)
 
 }
 }
 using namespace kiss;
 
 OTHER_PYTHON_MODULE(kiss_core) {
-  typedef Paths Self;
-  Class<Self>("Paths")
-    .OTHER_INIT()
-    ;
-
   OTHER_OBJECT_2(s12_identity,S12())
   OTHER_FUNCTION(s12_parity)
   OTHER_FUNCTION(s12_times)
